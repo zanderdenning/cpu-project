@@ -1,0 +1,6 @@
+args
+saved fp
+static link
+return address <- fp
+local vars
+temporaries

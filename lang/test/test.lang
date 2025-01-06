@@ -1,0 +1,23 @@
+package test;
+
+void test(char *str, int b, int c) {
+
+}
+
+int32 a;
+int32 b;
+char c;
+char d;
+int32 e;
+
+int main(int argc, char **argv) {
+	char variable2;
+	char variable3;
+	int32 variable;
+	test("abc", 1, 2);
+	variable = a = 2;
+	variable2;
+	variable3;
+	1 + 2 + 3 + 4;
+	return 0;
+}
