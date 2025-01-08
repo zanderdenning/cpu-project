@@ -4,26 +4,21 @@ from typing import Any
 
 from lang import types
 
+class ValueType(Enum):
+
+	NONE = auto()
+	REG = auto()
+	IMM = auto()
+	LABEL = auto()
+	CONST_REG = auto()
+
 class InstructionType(Enum):
 	
-	CONST_INT = auto()
-	GLOBAL_ADDR_LOAD = auto()
-	ARG_STORE = auto()
-	LOCAL_LOAD = auto()
-	LOCAL_STORE = auto()
-	NESTED_LOCAL_LOAD = auto()
-	NESTED_LOCAL_STORE = auto()
-	LOAD_FP = auto()
-	NESTED_LOAD_FP = auto()
-	LOAD_STATIC_LINK = auto()
-	NESTED_LOAD_STATIC_LINK = auto()
-	GLOBAL_LOAD = auto()
-	GLOBAL_STORE = auto()
+	COPY = auto()
+	LOAD = auto()
+	STORE = auto()
 	CALL = auto()
-	CALL_STATIC = auto()
-	LOAD_STATIC_FUNC_ADDR = auto()
 	RET = auto()
-	RET_VOID = auto()
 	INLINE_ASM = auto()
 	SYSCALL = auto()
 	BINARY_OP = auto()
@@ -31,25 +26,32 @@ class InstructionType(Enum):
 class Instruction:
 
 	instruction_type: InstructionType
-	rd: int
-	rs1: int
-	rs2: int
-	imm: Any
+	rd: int | str | None
+	rs1: int | str | None
+	rs2: int | str | None
+	rs1_type: ValueType
+	rs2_type: ValueType
+	data: Any
 	do_not_optimize: bool
 
-	def __init__(self, instruction_type: InstructionType, rd: int, rs1: int, rs2: int, imm: Any, do_not_optimize: bool):
+	def __init__(self, instruction_type: InstructionType, rd: int | str | None, rs1: int | str | None, rs2: int | str | None, rs1_type: ValueType, rs2_type: ValueType, do_not_optimize: bool, data: Any):
 		self.instruction_type = instruction_type
 		self.rd = rd
 		self.rs1 = rs1
 		self.rs2 = rs2
-		self.imm = imm
+		self.rs1_type = rs1_type
+		self.rs2_type = rs2_type
+		self.data = data
 		self.do_not_optimize = do_not_optimize
 	
 	def __str__(self):
-		return f"{self.instruction_type.name}  {self.rd}  {self.rs1} {self.rs2}  [{self.imm}]  {self.do_not_optimize}"
+		return f"{self.instruction_type.name}  {self.rd}  {self.rs1}/{self.rs1_type.name} {self.rs2}/{self.rs1_type.name}  [{self.data}]  {self.do_not_optimize}"
 
 REG_NONE = 0
-REG_RET = 8
+REG_FP = "fp"
+REG_RET = "a0"
+REG_TMP_A = "t14"
+REG_TMP_B = "t15"
 
 class InstructionList:
 
@@ -89,49 +91,142 @@ class InstructionList:
 		if size == 2:
 			return "h" if signed else "hu"
 		return "w"
+
+	def put_in_reg(self, value: int | str | None, value_type: ValueType, file_out: TextIOWrapper, tmp_var: str) -> str:
+		# TODO: Support big immediates
+		if value_type == ValueType.IMM or value_type == ValueType.LABEL:
+			file_out.write(f"li {tmp_var} {value}\n")
+		elif value_type == ValueType.REG:
+			return self._reg(value)
+		elif value_type == ValueType.CONST_REG:
+			return value
+		return tmp_var
+
+	# Copies
 	
 	def write_constant_int(self, rd: int, value: int):
-		self.instructions.append(Instruction(InstructionType.CONST_INT, rd, REG_NONE, REG_NONE, value, False))
-	
-	def output_constant_int(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"li {self._reg(inst.rd)} {inst.imm}\n")
+		self.instructions.append(Instruction(InstructionType.COPY, rd, value, None, ValueType.IMM, ValueType.NONE, False, None))
 	
 	def write_global_addr_load(self, rd: int, value: str):
-		self.instructions.append(Instruction(InstructionType.GLOBAL_ADDR_LOAD, rd, REG_NONE, REG_NONE, value, False))
+		self.instructions.append(Instruction(InstructionType.COPY, rd, value, None, ValueType.LABEL, ValueType.NONE, False, None))
 	
-	def output_global_addr_load(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"li {self._reg(inst.rd)} {inst.imm}\n")
+	def output_copy(self, inst: Instruction, file_out: TextIOWrapper):
+		# TODO: Support big immediates
+		if inst.rs1_type == ValueType.REG:
+			file_out.write(f"mv {self._reg(inst.rd)} {self._reg(inst.rs1)}\n")
+		elif inst.rs1_type == ValueType.CONST_REG:
+			file_out.write(f"mv {self._reg(inst.rd)} {inst.rs1}\n")
+		elif inst.rs1_type == ValueType.IMM or inst.rs1_type == ValueType.LABEL:
+			file_out.write(f"li {self._reg(inst.rd)} {inst.rs1}\n")
+
+	# Stores
 
 	def write_arg_store(self, value: int, offset: int, locals_size: int):
-		self.instructions.append(Instruction(InstructionType.ARG_STORE, REG_NONE, value, REG_NONE, (offset, locals_size), True))
+		self.instructions.append(Instruction(InstructionType.STORE, REG_NONE, REG_FP, value, ValueType.CONST_REG, ValueType.REG, True, (-4 - offset - locals_size, True, 4, False)))
+
+	def write_local_store(self, value: int, offset: int, size: int):
+		self.instructions.append(Instruction(InstructionType.STORE, REG_NONE, REG_FP, value, ValueType.CONST_REG, ValueType.REG, True, (-4 - offset, False, size, False)))
 	
-	def output_arg_store(self, inst: Instruction, file_out: TextIOWrapper):
-		arg_offset = 4 + inst.imm[1] + self.temporaries_count * 4 + inst.imm[0]
-		file_out.write(f"sw {self._reg(inst.rs1)} -{arg_offset}(fp)\n")
+	def write_nested_local_store(self, value: int, fp: int, offset: int, size: int):
+		self.instructions.append(Instruction(InstructionType.STORE, REG_NONE, fp, value, ValueType.REG, ValueType.REG, True, (-4 - offset, False, size, False)))
+	
+	def write_global_store(self, value: int, symbol: str, size: int):
+		self.instructions.append(Instruction(InstructionType.STORE, REG_NONE, symbol, value, ValueType.LABEL, ValueType.REG, True, (0, False, size, False)))
+	
+	def output_store(self, inst: Instruction, file_out: TextIOWrapper):
+		rs1 = self.put_in_reg(inst.rs1, inst.rs1_type, file_out, REG_TMP_A)
+		rs2 = self.put_in_reg(inst.rs2, inst.rs2_type, file_out, REG_TMP_B)
+		offset = inst.data[0]
+		if inst.data[1]:
+			offset -= self.temporaries_count * 4
+		file_out.write(f"s{self._mem_access(inst.data[2], inst.data[3])} {rs2} {offset}({rs1})\n")
+	
+	# Loads
 
 	def write_local_load(self, rd: int, offset: int, size: int, signed: bool):
-		self.instructions.append(Instruction(InstructionType.LOCAL_LOAD, rd, REG_NONE, REG_NONE, (offset, size, signed), False))
+		self.instructions.append(Instruction(InstructionType.LOAD, rd, REG_FP, None, ValueType.CONST_REG, ValueType.NONE, False, (-4 - offset, False, size, signed)))
 	
-	def output_local_load(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"l{self._mem_access(inst.imm[1], inst.imm[2])} {self._reg(inst.rd)} -{4 + inst.imm[0]}(fp)\n")
+	def write_nested_local_load(self, rd: int, fp: int, offset: int, size: int, signed: bool):
+		self.instructions.append(Instruction(InstructionType.LOAD, rd, fp, None, ValueType.REG, ValueType.NONE, False, (-4 - offset, False, size, signed)))
 	
-	def write_local_store(self, value: int, offset: int, size: int, signed: bool):
-		self.instructions.append(Instruction(InstructionType.LOCAL_STORE, REG_NONE, value, REG_NONE, (offset, size, signed), True))
-	
-	def output_local_store(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"s{self._mem_access(inst.imm[1], inst.imm[2])} {self._reg(inst.rs1)} -{4 + inst.imm[0]}(fp)\n")
+	def write_global_load(self, rd: int, symbol: str, size: int, signed: bool):
+		self.instructions.append(Instruction(InstructionType.LOAD, rd, symbol, None, ValueType.LABEL, ValueType.NONE, False, (0, False, size, signed)))
 
-	def write_nested_local_load(self, rd: int, fp: int, offset: int):
-		self.instructions.append(Instruction(InstructionType.NESTED_LOCAL_LOAD, rd, REG_NONE, fp, offset, False))
-	
-	def output_nested_local_load(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"l{self._mem_access(inst.imm[1], inst.imm[2])} {self._reg(inst.rd)} -{4 + inst.imm[0]}({self._reg(inst.rs2)})\n")
+	def output_load(self, inst: Instruction, file_out: TextIOWrapper):
+		rs1 = self.put_in_reg(inst.rs1, inst.rs1_type, file_out, REG_TMP_A)
+		offset = inst.data[0]
+		if inst.data[1]:
+			offset -= self.temporaries_count * 4
+		file_out.write(f"l{self._mem_access(inst.data[2], inst.data[3])} {self._reg(inst.rd)} {offset}({rs1})\n")
 
-	def write_nested_local_store(self, value: int, fp: int, offset: int):
-		self.instructions.append(Instruction(InstructionType.NESTED_LOCAL_STORE, REG_NONE, value, fp, offset, True))
+	# Calls
+
+	def write_call(self, rd: int, func_addr: int, locals_size: int, args_size: int):
+		self.instructions.append(Instruction(InstructionType.CALL, rd, func_addr, None, ValueType.REG, ValueType.NONE, True, locals_size + args_size))
 	
-	def output_nested_local_store(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"l{self._mem_access(inst.imm[1], inst.imm[2])} {self._reg(inst.rs1)} -{4 + inst.imm[0]}({self._reg(inst.rs2)})\n")
+	def write_call_static(self, rd: int, func_name: str, locals_size: int, args_size: int):
+		self.instructions.append(Instruction(InstructionType.CALL, rd, func_name, None, ValueType.LABEL, ValueType.NONE, True, locals_size + args_size))
+	
+	def output_call(self, inst: Instruction, file_out: TextIOWrapper):
+		saved_fp_offset = 4 + inst.data + self.temporaries_count * 4
+		static_link_offset = saved_fp_offset + 4
+		new_fp_offset = static_link_offset + 4
+		file_out.write(f"sw fp -{saved_fp_offset}(fp)\n")
+		file_out.write(f"sw fp -{static_link_offset}(fp)\n") # TODO: Correct static link
+		file_out.write(f"addi fp fp -{new_fp_offset}\n")
+		# TODO: Support big immediates
+		if inst.rs1_type == ValueType.REG:
+			file_out.write(f"jra ra {self._reg(inst.rs1)}\n")
+		elif inst.rs1_type == ValueType.CONST_REG:
+			file_out.write(f"jra ra {inst.rs1}\n")
+		elif inst.rs1_type == ValueType.IMM or inst.rs1_type == ValueType.LABEL:
+			file_out.write(f"ja ra {inst.rs1}\n")
+		file_out.write(f"mv {self._reg(inst.rd)} a0\n")
+	
+	# Returns
+	
+	def write_ret(self, value: int):
+		self.instructions.append(Instruction(InstructionType.RET, REG_NONE, value, None, ValueType.REG, ValueType.NONE, True, None))
+	
+	def write_ret_void(self):
+		self.instructions.append(Instruction(InstructionType.RET, REG_NONE, None, None, ValueType.NONE, ValueType.NONE, True, None))
+	
+	def output_ret(self, inst: Instruction, file_out: TextIOWrapper):
+		if inst.rs1_type != ValueType.NONE:
+			rs1 = self.put_in_reg(inst.rs1, inst.rs1_type, file_out, REG_TMP_A)
+			file_out.write(f"mv a0 {rs1}\n")
+		file_out.write(f"lw ra 0(fp)\n")
+		file_out.write(f"lw fp 8(fp)\n")
+		file_out.write(f"jra zero ra\n")
+	
+	# Inline ASM
+	
+	def write_inline_asm(self, asm: str):
+		self.instructions.append(Instruction(InstructionType.INLINE_ASM, REG_NONE, None, None, ValueType.NONE, ValueType.NONE, True, asm))
+	
+	def output_inline_asm(self, inst: Instruction, file_out: TextIOWrapper):
+		file_out.write(f"{inst.data}\n")
+	
+	# Syscalls
+
+	def write_syscall(self, syscall: int):
+		self.instructions.append(Instruction(InstructionType.SYSCALL, REG_NONE, None, None, ValueType.NONE, ValueType.NONE, True, syscall))
+	
+	def output_syscall(self, inst: Instruction, file_out: TextIOWrapper):
+		file_out.write(f"syscall {inst.data}\n")
+	
+	# Binary operations
+	
+	def write_binary_op(self, rd: int, rs1: int, rs2: int, op: str):
+		self.instructions.append(Instruction(InstructionType.BINARY_OP, rd, rs1, rs2, ValueType.REG, ValueType.REG, False, op))
+	
+	def output_binary_op(self, inst: Instruction, file_out: TextIOWrapper):
+		# TODO: Use RI instructions
+		rs1 = self.put_in_reg(inst.rs1, inst.rs1_type, file_out, REG_TMP_A)
+		rs2 = self.put_in_reg(inst.rs2, inst.rs2_type, file_out, REG_TMP_B)
+		file_out.write(f"{inst.data} {self._reg(inst.rd)} {rs1} {rs2}\n")
+
+	# TODO: Below this line
 
 	def write_load_fp(self, rd: int):
 		self.instructions.append(Instruction(InstructionType.LOAD_FP, rd, REG_NONE, REG_NONE, 0, False))
@@ -145,78 +240,7 @@ class InstructionList:
 	def write_nested_load_static_link(self, rd: int, fp: int):
 		self.instructions.append(Instruction(InstructionType.NESTED_LOAD_STATIC_LINK, rd, fp, REG_NONE, 0, False))
 
-	def write_global_load(self, rd: int, symbol: str, size: int, signed: bool):
-		self.instructions.append(Instruction(InstructionType.GLOBAL_LOAD, rd, REG_NONE, REG_NONE, (symbol, size, signed), False))
-
-	def output_global_load(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"li t15 ${inst.imm[0]}\n")
-		file_out.write(f"l{self._mem_access(inst.imm[1], inst.imm[2])} {inst.rs1} 0(t15)\n")
-
-	def write_global_store(self, value: int, symbol: str, size: int, signed: bool):
-		self.instructions.append(Instruction(InstructionType.GLOBAL_STORE, REG_NONE, value, REG_NONE, (symbol, size, signed), True))
-	
-	def output_global_store(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"li t15 ${inst.imm[0]}\n")
-		file_out.write(f"s{self._mem_access(inst.imm[1], inst.imm[2])} {inst.rs1} 0(t15)\n")
-
-	def write_call(self, rd: int, func_addr: int, locals_size: int, args_size: int):
-		self.instructions.append(Instruction(InstructionType.CALL, rd, func_addr, REG_NONE, (0, locals_size, args_size), True))
-	
-	def output_call(self, inst: Instruction, file_out: TextIOWrapper):
-		saved_fp_offset = 4 + inst.imm[1] + self.temporaries_count * 4 + inst.imm[2]
-		static_link_offset = saved_fp_offset + 4
-		new_fp_offset = static_link_offset + 4
-		file_out.write(f"sw fp -{saved_fp_offset}(fp)\n")
-		file_out.write(f"sw fp -{static_link_offset}(fp)\n") # TODO: Correct static link
-		file_out.write(f"addi fp fp -{new_fp_offset}\n")
-		file_out.write(f"jra ra {self._reg(inst.rs1)}\n")
-		file_out.write(f"mv {self._reg(inst.rd)} a0\n")
-
-	def write_call_static(self, rd: int, func_name: str, locals_size: int, args_size: int):
-		self.instructions.append(Instruction(InstructionType.CALL_STATIC, rd, REG_NONE, REG_NONE, (func_name, locals_size, args_size), True))
-	
-	def output_call_static(self, inst: Instruction, file_out: TextIOWrapper):
-		saved_fp_offset = 4 + inst.imm[1] + self.temporaries_count * 4 + inst.imm[2]
-		static_link_offset = saved_fp_offset + 4
-		new_fp_offset = static_link_offset + 4
-		file_out.write(f"sw fp -{saved_fp_offset}(fp)\n")
-		file_out.write(f"sw fp -{static_link_offset}(fp)\n") # TODO: Correct static link
-		file_out.write(f"addi fp fp -{new_fp_offset}\n")
-		file_out.write(f"ja ra {inst.imm[0]}\n")
-		file_out.write(f"mv {self._reg(inst.rd)} a0\n")
-
-	def write_load_static_func_addr(self, rd: int, func_name: str):
-		self.instructions.append(Instruction(InstructionType.LOAD_STATIC_FUNC_ADDR, rd, REG_NONE, REG_NONE, func_name, False))
-
-	def write_ret(self, value: int):
-		self.instructions.append(Instruction(InstructionType.RET, REG_NONE, value, REG_NONE, 0, True))
-	
-	def output_ret(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"mv a0 {self._reg(inst.rs1)}\n")
-		self.output_ret_void(inst, file_out)
-
-	def write_ret_void(self):
-		self.instructions.append(Instruction(InstructionType.RET_VOID, REG_NONE, REG_NONE, REG_NONE, 0, True))
-	
-	def output_ret_void(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"lw ra 0(fp)\n")
-		file_out.write(f"lw fp 8(fp)\n")
-		file_out.write(f"jra zero ra\n")
-	
-	def write_inline_asm(self, asm: str):
-		self.instructions.append(Instruction(InstructionType.INLINE_ASM, REG_NONE, REG_NONE, REG_NONE, asm, True))
-	
-	def output_inline_asm(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"{inst.imm}\n")
-
-	def write_syscall(self, syscall: int):
-		self.instructions.append(Instruction(InstructionType.SYSCALL, REG_NONE, REG_NONE, REG_NONE, syscall, True))
-	
-	def write_binary_op(self, rd: int, rs1: int, rs2: int, op: str):
-		self.instructions.append(Instruction(InstructionType.BINARY_OP, rd, rs1, rs2, op, False))
-	
-	def output_binary_op(self, inst: Instruction, file_out: TextIOWrapper):
-		file_out.write(f"{inst.imm} {self._reg(inst.rd)} {self._reg(inst.rs1)} {self._reg(inst.rs2)}\n")
+	# Optimization and generation
 
 	def generate_code(self, out_file: TextIOWrapper):
 		print()
@@ -257,9 +281,11 @@ class InstructionList:
 				inst = self.instructions[j]
 				if inst.rd != REG_NONE:
 					new_live_vars_in.discard(inst.rd)
-				if inst.rs1 != REG_NONE:
+				if inst.rs1_type == ValueType.REG:
+					print((inst.rs1, inst.rs1_type))
 					new_live_vars_in.add(inst.rs1)
-				if inst.rs2 != REG_NONE:
+				if inst.rs2_type == ValueType.REG:
+					print((inst.rs2, inst.rs2_type))
 					new_live_vars_in.add(inst.rs2)
 			if new_live_vars_in != self.live_vars_in[i]:
 				changed = True
@@ -280,9 +306,9 @@ class InstructionList:
 				inst = self.instructions[j]
 				if inst.rd != REG_NONE:
 					live_vars.discard(inst.rd)
-				if inst.rs1 != REG_NONE:
+				if inst.rs1_type == ValueType.REG:
 					live_vars.add(inst.rs1)
-				if inst.rs2 != REG_NONE:
+				if inst.rs2_type == ValueType.REG:
 					live_vars.add(inst.rs2)
 				for reg in live_vars:
 					rig[reg].update(live_vars)
@@ -309,25 +335,12 @@ class InstructionList:
 			self.register_map[i] = mapped_register
 
 _INSTRUCTION_WRITE_MAP = {
-	InstructionType.CONST_INT: InstructionList.output_constant_int,
-	InstructionType.GLOBAL_ADDR_LOAD: InstructionList.output_global_addr_load,
-	InstructionType.ARG_STORE: InstructionList.output_arg_store,
-	InstructionType.LOCAL_LOAD: InstructionList.output_local_load,
-	InstructionType.LOCAL_STORE: InstructionList.output_local_store,
-	InstructionType.NESTED_LOCAL_LOAD: InstructionList.output_nested_local_load,
-	InstructionType.NESTED_LOCAL_STORE: InstructionList.output_nested_local_store,
-	InstructionType.LOAD_FP: print,
-	InstructionType.NESTED_LOAD_FP: print,
-	InstructionType.LOAD_STATIC_LINK: print,
-	InstructionType.NESTED_LOAD_STATIC_LINK: print,
-	InstructionType.GLOBAL_LOAD: InstructionList.output_global_load,
-	InstructionType.GLOBAL_STORE: InstructionList.output_global_store,
+	InstructionType.COPY: InstructionList.output_copy,
+	InstructionType.LOAD: InstructionList.output_load,
+	InstructionType.STORE: InstructionList.output_store,
 	InstructionType.CALL: InstructionList.output_call,
-	InstructionType.CALL_STATIC: InstructionList.output_call_static,
-	InstructionType.LOAD_STATIC_FUNC_ADDR: print,
 	InstructionType.RET: InstructionList.output_ret,
-	InstructionType.RET_VOID: InstructionList.output_ret_void,
 	InstructionType.INLINE_ASM: InstructionList.output_inline_asm,
-	InstructionType.SYSCALL: print,
-	InstructionType.BINARY_OP : InstructionList.output_binary_op,
+	InstructionType.SYSCALL: InstructionList.output_syscall,
+	InstructionType.BINARY_OP: InstructionList.output_binary_op,
 }

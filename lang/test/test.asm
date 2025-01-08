@@ -1,12 +1,12 @@
 .section code
-.global test:
+.global $test:
 sw ra 0(fp)
 lw ra 0(fp)
 lw fp 8(fp)
 jra zero ra
-.global main:
+.global $main:
 sw ra 0(fp)
-li x9 str_2614353307
+li x9 str_585763976
 sw x9 -12(fp)
 li x9 1
 sw x9 -16(fp)
@@ -15,11 +15,11 @@ sw x9 -20(fp)
 sw fp -24(fp)
 sw fp -28(fp)
 addi fp fp -32
-ja ra test
+ja ra $test
 mv x9 a0
 li x9 2
-li t15 $a
-sw 5 0(t15)
+li t14 $a
+sw x9 0(t14)
 sw x9 -8(fp)
 lbu x9 -4(fp)
 lbu x9 -5(fp)
@@ -50,6 +50,6 @@ jra zero ra
 .padding 3
 .global $e:
 .padding 4
-str_2614353307:
+str_585763976:
 .bytes 616263
 .padding 1

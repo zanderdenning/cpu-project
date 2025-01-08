@@ -211,6 +211,8 @@ class Parser():
 		self.current_function.write_ret_void()
 		func_scope = self.pop_scope()
 		func_path, func_body = self.pop_function()
+		if self.current_scope.is_global:
+			func_path = f"${func_path}"
 		print()
 		print(func_path)
 		for i in func_body.instructions:
@@ -279,13 +281,15 @@ class Parser():
 			if builtin_function != None:
 				return builtin_function(self)
 			self.error()
+		if depth == -1:
+			symbol = f"${symbol}"
 		
 		if location == scope.VarLocation.STATIC_FUNCTION:
 			if self.match_token(Token.PAREN_OPEN):
 				return self.parse_static_func_call(symbol, var_type)
 			else:
 				rd = self.current_function.get_register()
-				self.current_function.write_load_static_func_addr(rd, symbol)
+				self.current_function.write_global_addr_load(rd, symbol)
 				return (var_type, rd)
 		
 		if self.match_token(Token.EQUALS_ASSIGN):
@@ -294,15 +298,15 @@ class Parser():
 			if not types.can_assign_to(expr_type, var_type):
 				self.error()
 			if depth == -1:
-				self.current_function.write_global_store(expr_rs, symbol, type_size, type_signed)
+				self.current_function.write_global_store(expr_rs, symbol, type_size)
 			elif depth == 0:
-				self.current_function.write_local_store(expr_rs, var_scope.get_local_offset(symbol), type_size, type_signed)
+				self.current_function.write_local_store(expr_rs, var_scope.get_local_offset(symbol), type_size)
 			else:
 				fp_rd = self.current_function.get_register()
 				self.current_function.write_load_static_link(fp_rd)
 				for _ in range(1, depth):
 					self.current_function.write_nested_load_static_link(fp_rd, fp_rd)
-				self.current_function.write_nested_local_store(expr_rs, fp_rd, var_scope.get_local_offset(symbol), type_size, type_signed)
+				self.current_function.write_nested_local_store(expr_rs, fp_rd, var_scope.get_local_offset(symbol), type_size)
 			return (expr_type, expr_rs)
 		
 		rd = self.current_function.get_register()
