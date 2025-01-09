@@ -10,6 +10,7 @@ set_param general.maxThreads 8
 
 # RTL Sources
 read_verilog -sv "${rtl_dir}/top.sv"
+read_verilog -sv "${rtl_lib_dir}/debouncer.sv"
 read_verilog -sv "${rtl_lib_dir}/edge_detector_pos.sv"
 
 # Constraints
