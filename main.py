@@ -1,4 +1,5 @@
 import sys
+import os
 
 sys.path.append(".")
 
@@ -22,3 +23,7 @@ if __name__ == "__main__":
 		in_file = sys.argv[2]
 		out_file = sys.argv[3]
 		compiler.Compiler().compile(in_file, out_file)
+	elif command == "cpu_build":
+		os.system("vivado -mode batch -source cpu/scripts/build.tcl -log cpu/build/log/vivado.log -journal cpu/build/log/vivado.jou")
+	elif command == "cpu_program":
+		os.system("vivado -mode batch -source cpu/scripts/program.tcl -log cpu/build/log/vivado.log -journal cpu/build/log/vivado.jou")

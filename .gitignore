@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+
+# Vivado
+.Xil/
+init_env.bat
+clockinfo.txt
+vivado*.log
+vivado*.jou
