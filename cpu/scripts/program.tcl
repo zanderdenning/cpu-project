@@ -1,5 +1,10 @@
-set root_dir [file normalize "./cpu"]
-set build_dir "${root_dir}/build"
+source [file normalize "./cpu/scripts/header.tcl"]
+
+foreach file $rtl_files {
+	read_verilog -sv "${rtl_dir}/${file}"
+}
+
+read_xdc "${constraints_dir}/nexys.xdc"
 
 open_hw_manager
 connect_hw_server

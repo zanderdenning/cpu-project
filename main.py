@@ -7,6 +7,9 @@ from asm import asm, link
 from debugger import debugger
 from lang import compiler
 
+def vivado_script(script: str):
+	os.system(f"vivado -mode batch -source cpu/scripts/{script}.tcl -log cpu/build/log/vivado.log -journal cpu/build/log/vivado.jou")
+
 if __name__ == "__main__":
 	command = sys.argv[1]
 	if command == "debug":
@@ -24,6 +27,8 @@ if __name__ == "__main__":
 		out_file = sys.argv[3]
 		compiler.Compiler().compile(in_file, out_file)
 	elif command == "cpu_build":
-		os.system("vivado -mode batch -source cpu/scripts/build.tcl -log cpu/build/log/vivado.log -journal cpu/build/log/vivado.jou")
+		vivado_script("build")
 	elif command == "cpu_program":
-		os.system("vivado -mode batch -source cpu/scripts/program.tcl -log cpu/build/log/vivado.log -journal cpu/build/log/vivado.jou")
+		vivado_script("program")
+	elif command == "cpu_sim":
+		vivado_script("sim")

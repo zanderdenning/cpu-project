@@ -8,3 +8,4 @@ init_env.bat
 clockinfo.txt
 vivado*.log
 vivado*.jou
+cpu/build/*
