@@ -1,5 +1,7 @@
 source [file normalize "./cpu/scripts/header.tcl"]
 
+generate_target {synthesis} [get_ips]
+
 foreach file $rtl_files {
 	read_verilog -sv "${rtl_dir}/${file}"
 }

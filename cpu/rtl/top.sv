@@ -1,30 +1,30 @@
 `timescale 1ns / 1ps
 
+`include "constants.svh"
+
+import types::*;
+
 module top(
-	input logic clk,
-	input logic btnr, btnl,
-	output logic [7:0] led
+	input logic clk, rst,
+	input mem_resp_interface tb_mem_resp,
+	output mem_req_interface tb_mem_req
 );
 
-	logic [7:0] current_count;
-	logic btnr_debounced, btnl_debounced;
-	logic btnr_just_pressed, btnl_just_pressed;
+	logic [31:0] pc;
 
-	debouncer #(.TIME(10000), .CLOCK_PERIOD(10)) btnr_debouncer(.clk(clk), .in(btnr), .out(btnr_debounced));
-	debouncer #(.TIME(10000), .CLOCK_PERIOD(10)) btnl_debouncer(.clk(clk), .in(btnl), .out(btnl_debounced));
+	assign tb_mem_req.addr = pc[`PHYS_MEM_BITS-1+2:2];
+	assign tb_mem_req.write_data = 32'bX;
+	assign tb_mem_req.wen = 4'b0000;
+	assign tb_mem_req.ren = 1'b1;
+	assign tb_mem_req.resp_ready = 1'b1;
 
-	edge_detector_pos btnr_edge_detector(.clk(clk), .in(btnr_debounced), .out(btnr_just_pressed));
-	edge_detector_pos btnl_edge_detector(.clk(clk), .in(btnl_debounced), .out(btnl_just_pressed));
-
-	assign led = current_count;
-	
 	always_ff @(posedge clk) begin
-		if (btnr_just_pressed) begin
-			current_count <= current_count + 1;
+		if (rst) begin
+			pc <= 32'h50;
 		end
-		else if (btnl_just_pressed) begin
-			current_count <= current_count - 1;
+		else begin
+			pc <= pc + 4;
 		end
 	end
-	
+
 endmodule

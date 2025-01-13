@@ -3,7 +3,7 @@ import os
 
 sys.path.append(".")
 
-from asm import asm, link
+from asm import asm, asm_to_hex, link
 from debugger import debugger
 from lang import compiler
 
@@ -26,9 +26,17 @@ if __name__ == "__main__":
 		in_file = sys.argv[2]
 		out_file = sys.argv[3]
 		compiler.Compiler().compile(in_file, out_file)
+	elif command == "asm_to_hex":
+		in_file = sys.argv[2]
+		out_file = sys.argv[3]
+		asm_to_hex.asm_to_hex(in_file, out_file)
 	elif command == "cpu_build":
 		vivado_script("build")
 	elif command == "cpu_program":
 		vivado_script("program")
 	elif command == "cpu_sim":
 		vivado_script("sim")
+	elif command == "cpu_ip_gen":
+		vivado_script(f"ip/generate_{sys.argv[2]}")
+	elif command == "cpu_waveform":
+		os.system("gtkwave ./cpu/build/dump.vcd")

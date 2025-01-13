@@ -22,6 +22,8 @@ class Emulator:
 		self.pc = pc_init
 	
 	def set_register(self, rd: int, value: int):
+		if rd == 0:
+			return
 		self.registers[rd] = value & VALUE_MASK
 	
 	def set_byte(self, addr: int, value: int):
