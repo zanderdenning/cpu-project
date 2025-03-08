@@ -2,11 +2,12 @@ source [file normalize "./cpu/scripts/header.tcl"]
 
 generate_target {simulation} [get_ips]
 
-foreach file [glob "../build/ip/simulation/*.v"] {
+foreach file [glob "../build/ip/*/simulation/*.v"] {
+	exec echo "${file}"
 	exec xvlog "${file}"
 }
 
-foreach file [glob "../build/ip/sim/*.v"] {
+foreach file [glob "../build/ip/*/sim/*.v"] {
 	exec xvlog "${file}"
 }
 

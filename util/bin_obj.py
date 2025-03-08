@@ -5,7 +5,7 @@ from util import label
 
 OBJ_HEADER_LENGTH = 36
 EXE_HEADER_LENGTH = 28
-EXE_START_ADDR = 0x10
+EXE_START_ADDR = 0x80
 
 def generate_obj_header(version: tuple[int, int, int], code_global_labels_start: int, data_global_labels_start: int, relocation_table_start: int, data_start: int, data_length: int, instructions_start: int, instruction_count: int) -> bytes:
 	return struct.pack(

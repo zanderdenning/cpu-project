@@ -6,7 +6,7 @@ lw fp 8(fp)
 jra zero ra
 .global $main:
 sw ra 0(fp)
-li x9 str_585763976
+li x9 str_2559356032
 sw x9 -12(fp)
 li x9 1
 sw x9 -16(fp)
@@ -50,6 +50,6 @@ jra zero ra
 .padding 3
 .global $e:
 .padding 4
-str_585763976:
+str_2559356032:
 .bytes 616263
 .padding 1

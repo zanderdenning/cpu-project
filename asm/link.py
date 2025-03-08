@@ -97,7 +97,7 @@ class Linker:
 		with open(output_file, "wb") as out_file:
 			code_section = bin_obj.generate_code_section(self.instructions)
 			data_section = self.data_section
-			main = self.global_labels.get("main").offset
+			main = self.global_labels.get("$main").offset
 			data_start = bin_obj.EXE_HEADER_LENGTH
 			code_start = data_start + len(data_section)
 			header = bin_obj.generate_exe_header(self.files[0].version, code_start, len(self.instructions), data_start, len(data_section), main)

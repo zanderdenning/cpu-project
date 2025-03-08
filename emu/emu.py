@@ -57,7 +57,7 @@ class Emulator:
 			version, instruction_start, instructions_count, data_start, data_length, main = bin_obj.parse_exe_header(file)
 			self.reset(main)
 			file.seek(0)
-			self.load_memory(0x10, list(file.read()))
+			self.load_memory(bin_obj.EXE_START_ADDR, list(file.read()))
 			self.registers[REG_FP] = 0xFFFFFFE0
 			
 	def load_memory(self, addr: int, string: list[int], stride: int = 1):

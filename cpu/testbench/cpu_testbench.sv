@@ -18,26 +18,40 @@ module cpu_testbench(
 
 	logic rst;
 
-	logic [31:0] memory [(2**`PHYS_MEM_BITS)-1:0];
+	logic [127:0] memory [0:(2**`PHYS_MEM_BITS)-1];
 
-	mem_resp_interface tb_mem_resp;
-	mem_req_interface tb_mem_req;
+	logic [`PHYS_MEM_BITS-1:0] imem_req_addr;
+	logic imem_req_valid;
 
-	top dut(
+	logic [127:0] imem_resp_data;
+	logic imem_resp_ready;
+	logic imem_resp_valid;
+
+	core dut(
 		.clk(clk), .rst(rst),
-		.tb_mem_resp(tb_mem_resp),
-		.tb_mem_req(tb_mem_req)
+
+		.imem_req_addr(imem_req_addr),
+		.imem_req_ready(1'b1),
+		.imem_req_valid(imem_req_valid),
+
+		.imem_resp_data(imem_resp_data),
+		.imem_resp_ready(imem_resp_ready),
+		.imem_resp_valid(imem_resp_valid)
 	);
 
-	assign tb_mem_resp.req_ready = 1'b1;
-
-	always_ff @(posedge clk) begin
-		tb_mem_resp.read_data <= memory[tb_mem_req.addr];
-		tb_mem_resp.resp_valid <= tb_mem_req.ren;
+	always_comb begin
+		if (imem_req_valid & imem_resp_ready) begin
+			imem_resp_data = memory[imem_req_addr];
+			imem_resp_valid = 1'b1;
+		end
+		else begin
+			imem_resp_data = 127'b0;
+			imem_resp_valid = 1'b0;
+		end
 	end
 
 	initial begin
-		$readmemh("../testbench/ram.mem", memory, 4);
+		$readmemh("../testbench/ram.mem", memory, 8);
 	end
 
 	initial begin
